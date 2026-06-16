@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { Shift } from '../lib/types'
 import { exportData, importData } from '../lib/store'
+import { exportText } from '../lib/exportText'
 import { Modal } from './Modal'
 
 type DataMenuProps = {
@@ -9,74 +10,123 @@ type DataMenuProps = {
   onClose: () => void
 }
 
-/** Backup & restore: export shifts to a JSON file, or import one back. */
+function todayStamp(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+/** Trigger a file download in a way that's reliable on mobile browsers. */
+function downloadFile(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  // Append to the DOM and defer cleanup so mobile browsers (notably Firefox
+  // for Android) reliably fetch the blob before the URL is revoked.
+  document.body.appendChild(a)
+  a.click()
+  setTimeout(() => {
+    a.remove()
+    URL.revokeObjectURL(url)
+  }, 0)
+}
+
+const buttonClass =
+  'rounded-xl bg-slate-700 py-3 font-medium text-slate-100 active:bg-slate-600'
+
+const sectionTitleClass =
+  'text-xs font-semibold uppercase tracking-wide text-slate-500'
+
+/** Export shifts as readable text or a JSON backup, or import a backup back. */
 export function DataMenu({ shifts, onImport, onClose }: DataMenuProps) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<Shift[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
-  function handleExport() {
-    const blob = new Blob([exportData(shifts)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    const stamp = new Date().toISOString().slice(0, 10)
-    a.href = url
-    a.download = `shift-tracker-backup-${stamp}.json`
-    // Append to the DOM and defer cleanup so mobile browsers (notably Firefox
-    // for Android) reliably fetch the blob before the URL is revoked.
-    document.body.appendChild(a)
-    a.click()
-    setTimeout(() => {
-      a.remove()
-      URL.revokeObjectURL(url)
-    }, 0)
+  function handleExportText() {
+    downloadFile(exportText(shifts), `shifts-${todayStamp()}.txt`, 'text/plain')
+  }
+
+  async function handleCopyText() {
+    setError(null)
+    try {
+      await navigator.clipboard.writeText(exportText(shifts))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setError('Couldn’t copy to the clipboard — use “Download .txt” instead.')
+    }
+  }
+
+  function handleExportJson() {
+    downloadFile(
+      exportData(shifts),
+      `shift-tracker-backup-${todayStamp()}.json`,
+      'application/json',
+    )
   }
 
   async function handleFile(file: File) {
     setError(null)
     try {
       const text = await file.text()
-      const imported = importData(text)
-      setPending(imported)
+      setPending(importData(text))
     } catch {
       setError('That file could not be read as a valid backup.')
     }
   }
 
+  const count = `${shifts.length} shift${shifts.length === 1 ? '' : 's'}`
+
   return (
-    <Modal title="Backup & restore" onClose={onClose}>
-      <div className="flex flex-col gap-3">
-        <p className="text-sm text-slate-400">
-          Your shifts are stored on this device. Export a backup file to keep them
-          safe or move them to another device.
-        </p>
+    <Modal title="Export & backup" onClose={onClose}>
+      <div className="flex flex-col gap-5">
+        {/* Readable text export */}
+        <section className="flex flex-col gap-2">
+          <h3 className={sectionTitleClass}>Readable text</h3>
+          <p className="text-sm text-slate-400">
+            A plain-text list of your shifts by month — dates, hours, and notes.
+          </p>
+          <div className="flex gap-2">
+            <button type="button" onClick={handleExportText} className={`flex-1 ${buttonClass}`}>
+              Download .txt
+            </button>
+            <button type="button" onClick={handleCopyText} className={`flex-1 ${buttonClass}`}>
+              {copied ? 'Copied ✓' : 'Copy text'}
+            </button>
+          </div>
+        </section>
 
-        <button
-          type="button"
-          onClick={handleExport}
-          className="rounded-xl bg-slate-700 py-3 font-medium text-slate-100 active:bg-slate-600"
-        >
-          Export backup ({shifts.length} shift{shifts.length === 1 ? '' : 's'})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="rounded-xl bg-slate-700 py-3 font-medium text-slate-100 active:bg-slate-600"
-        >
-          Import from backup…
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) handleFile(file)
-            e.target.value = ''
-          }}
-        />
+        {/* JSON backup & restore */}
+        <section className="flex flex-col gap-2 border-t border-slate-700 pt-4">
+          <h3 className={sectionTitleClass}>Backup & restore</h3>
+          <p className="text-sm text-slate-400">
+            Your shifts live on this device. Save a backup file to keep them safe
+            or move them to another device.
+          </p>
+          <button type="button" onClick={handleExportJson} className={buttonClass}>
+            Export backup ({count})
+          </button>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className={buttonClass}
+          >
+            Import from backup…
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) handleFile(file)
+              e.target.value = ''
+            }}
+          />
+        </section>
 
         {error && <p className="text-sm font-medium text-rose-400">{error}</p>}
 

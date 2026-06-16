@@ -90,7 +90,7 @@ export default function App() {
         <button
           type="button"
           onClick={openDataMenu}
-          aria-label="Backup & restore"
+          aria-label="Export & backup"
           className="rounded-full p-2 text-slate-400 active:bg-slate-700"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -21,6 +21,9 @@ Core experience requested:
 - **Retroactively edit** any shift — change start time, end time, note — or delete it.
 - **Manually add a whole shift** after the fact (forgot to track it at all): enter date, start,
   end, and optional note, and log it directly. Same editor as edit, in "create" mode.
+- **Readable plain-text export** of all shifts (grouped by month with totals; weekday + date,
+  time range, hours, and notes) — downloadable as `.txt` or copyable to the clipboard. Separate
+  from the JSON backup, which is for restoring.
 - Should be **intuitive and pleasant** to use. Owner doesn't care about tech choices, just wants
   something that works and looks good.
 
@@ -59,7 +62,8 @@ type Shift = {
 ## Project structure
 
 - `src/lib/types.ts` — types
-- `src/lib/store.ts` — localStorage persistence + load/save/export/import
+- `src/lib/store.ts` — localStorage persistence + load/save/JSON export/import
+- `src/lib/exportText.ts` — readable plain-text report of all shifts (grouped by month)
 - `src/lib/time.ts` — date/time formatting & month helpers
 - `src/hooks/useShifts.ts` — state + actions (start/stop/edit/delete), persistence wiring
 - `src/components/` — UI (StartStopButton, MonthNav, ShiftList, ShiftRow, ShiftEditor, etc.)
