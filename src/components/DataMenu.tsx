@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react'
-import type { Shift } from '../lib/types'
-import { exportData, importData } from '../lib/store'
+import type { Category, Shift } from '../lib/types'
+import { exportData, importData, type LoadedData } from '../lib/store'
 import { exportText } from '../lib/exportText'
 import { Modal } from './Modal'
 
 type DataMenuProps = {
   shifts: Shift[]
-  onImport: (shifts: Shift[]) => void
+  categories: Category[]
+  onImport: (shifts: Shift[], categories: Category[]) => void
   onClose: () => void
 }
 
@@ -38,20 +39,20 @@ const sectionTitleClass =
   'text-xs font-semibold uppercase tracking-wide text-slate-500'
 
 /** Export shifts as readable text or a JSON backup, or import a backup back. */
-export function DataMenu({ shifts, onImport, onClose }: DataMenuProps) {
+export function DataMenu({ shifts, categories, onImport, onClose }: DataMenuProps) {
   const fileRef = useRef<HTMLInputElement>(null)
-  const [pending, setPending] = useState<Shift[] | null>(null)
+  const [pending, setPending] = useState<LoadedData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
   function handleExportText() {
-    downloadFile(exportText(shifts), `shifts-${todayStamp()}.txt`, 'text/plain')
+    downloadFile(exportText(shifts, categories), `shifts-${todayStamp()}.txt`, 'text/plain')
   }
 
   async function handleCopyText() {
     setError(null)
     try {
-      await navigator.clipboard.writeText(exportText(shifts))
+      await navigator.clipboard.writeText(exportText(shifts, categories))
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
@@ -61,7 +62,7 @@ export function DataMenu({ shifts, onImport, onClose }: DataMenuProps) {
 
   function handleExportJson() {
     downloadFile(
-      exportData(shifts),
+      exportData(shifts, categories),
       `shift-tracker-backup-${todayStamp()}.json`,
       'application/json',
     )
@@ -77,7 +78,7 @@ export function DataMenu({ shifts, onImport, onClose }: DataMenuProps) {
     }
   }
 
-  const count = `${shifts.length} shift${shifts.length === 1 ? '' : 's'}`
+  const count = `${shifts.length} entr${shifts.length === 1 ? 'y' : 'ies'}`
 
   return (
     <Modal title="Export & backup" onClose={onClose}>
@@ -86,7 +87,7 @@ export function DataMenu({ shifts, onImport, onClose }: DataMenuProps) {
         <section className="flex flex-col gap-2">
           <h3 className={sectionTitleClass}>Readable text</h3>
           <p className="text-sm text-slate-400">
-            A plain-text list of your shifts by month — dates, hours, and notes.
+            A plain-text list of your entries by month — dates, hours, categories, and notes.
           </p>
           <div className="flex gap-2">
             <button type="button" onClick={handleExportText} className={`flex-1 ${buttonClass}`}>
@@ -102,8 +103,8 @@ export function DataMenu({ shifts, onImport, onClose }: DataMenuProps) {
         <section className="flex flex-col gap-2 border-t border-slate-700 pt-4">
           <h3 className={sectionTitleClass}>Backup & restore</h3>
           <p className="text-sm text-slate-400">
-            Your shifts live on this device. Save a backup file to keep them safe
-            or move them to another device.
+            Your data lives on this device. Save a backup file (entries + categories)
+            to keep it safe or move it to another device.
           </p>
           <button type="button" onClick={handleExportJson} className={buttonClass}>
             Export backup ({count})
@@ -135,9 +136,10 @@ export function DataMenu({ shifts, onImport, onClose }: DataMenuProps) {
             <p className="text-sm text-amber-200">
               Replace all current data with{' '}
               <strong>
-                {pending.length} shift{pending.length === 1 ? '' : 's'}
+                {pending.shifts.length} entr{pending.shifts.length === 1 ? 'y' : 'ies'}
               </strong>{' '}
-              from this backup? This can’t be undone.
+              and {pending.categories.length} categor
+              {pending.categories.length === 1 ? 'y' : 'ies'} from this backup? This can’t be undone.
             </p>
             <div className="mt-3 flex gap-2">
               <button
@@ -150,7 +152,7 @@ export function DataMenu({ shifts, onImport, onClose }: DataMenuProps) {
               <button
                 type="button"
                 onClick={() => {
-                  onImport(pending)
+                  onImport(pending.shifts, pending.categories)
                   setPending(null)
                   onClose()
                 }}

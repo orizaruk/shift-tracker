@@ -103,3 +103,41 @@ export function fromLocalInputValue(value: string): string {
   // `new Date('YYYY-MM-DDTHH:mm')` is interpreted as local time.
   return new Date(value).toISOString()
 }
+
+/** Local "YYYY-MM-DD" for an ISO string — the value an <input type="date"> uses. */
+export function toDateInputValue(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/** Today's local date as "YYYY-MM-DD". */
+export function todayDateInputValue(): string {
+  return toDateInputValue(new Date().toISOString())
+}
+
+/** ISO string for local midnight of a "YYYY-MM-DD" date value (used for all-day entries). */
+export function dateInputToMidnightIso(value: string): string {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day, 0, 0, 0, 0).toISOString()
+}
+
+/**
+ * Inclusive list of "YYYY-MM-DD" dates from `from` to `to` (capped to `max` days
+ * to guard against runaway ranges). Returns [] if `to` precedes `from`.
+ */
+export function enumerateDateRange(from: string, to: string, max = 366): string[] {
+  const [fy, fm, fd] = from.split('-').map(Number)
+  const [ty, tm, td] = to.split('-').map(Number)
+  const start = new Date(fy, fm - 1, fd)
+  const end = new Date(ty, tm - 1, td)
+  if (end.getTime() < start.getTime()) return []
+  const days: string[] = []
+  const cursor = new Date(start)
+  while (cursor.getTime() <= end.getTime() && days.length < max) {
+    days.push(
+      `${cursor.getFullYear()}-${pad(cursor.getMonth() + 1)}-${pad(cursor.getDate())}`,
+    )
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return days
+}

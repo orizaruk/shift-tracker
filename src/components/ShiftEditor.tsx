@@ -1,19 +1,29 @@
 import { useMemo, useState } from 'react'
 import type { NewShiftInput } from '../hooks/useShifts'
-import type { Shift } from '../lib/types'
+import type { Category, Shift } from '../lib/types'
 import {
+  dateInputToMidnightIso,
+  enumerateDateRange,
   formatDuration,
   fromLocalInputValue,
+  toDateInputValue,
   toLocalInputValue,
+  todayDateInputValue,
 } from '../lib/time'
 import { Modal } from './Modal'
+import { CategoryPicker } from './CategoryPicker'
+
+type EntryKind = 'timed' | 'allday'
 
 type ShiftEditorProps = {
-  /** The shift being edited, or null to create a new one. */
+  /** The entry being edited, or null to create a new one. */
   shift: Shift | null
-  /** Is another shift (not this one) currently ongoing? */
+  categories: Category[]
+  /** Is another timed shift (not this one) currently ongoing? */
   hasOtherOngoing: boolean
-  onSubmit: (values: NewShiftInput) => void
+  onCreateCategory: (name: string, color: string) => Category
+  /** One input for an edit/single entry; many for an all-day date range. */
+  onSubmit: (inputs: NewShiftInput[]) => void
   onDelete?: () => void
   onClose: () => void
 }
@@ -22,18 +32,11 @@ function nowLocalValue(): string {
   return toLocalInputValue(new Date().toISOString())
 }
 
-/** Local datetime value `minutes` before now (used for sensible create defaults). */
 function minutesAgoLocalValue(minutes: number): string {
   return toLocalInputValue(new Date(Date.now() - minutes * 60000).toISOString())
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-sm font-medium text-slate-300">{label}</span>
@@ -47,133 +50,214 @@ const inputClass =
 
 export function ShiftEditor({
   shift,
+  categories,
   hasOtherOngoing,
+  onCreateCategory,
   onSubmit,
   onDelete,
   onClose,
 }: ShiftEditorProps) {
   const isCreate = shift === null
 
+  const [kind, setKind] = useState<EntryKind>(() =>
+    shift?.allDay ? 'allday' : 'timed',
+  )
+
+  // Timed fields.
   const [start, setStart] = useState(() =>
-    // New manual shift defaults to a valid 1-hour block ending now, so the form
-    // opens without an error; the owner then adjusts the date/times.
-    shift ? toLocalInputValue(shift.start) : minutesAgoLocalValue(60),
+    shift && !shift.allDay ? toLocalInputValue(shift.start) : minutesAgoLocalValue(60),
   )
-  const [ended, setEnded] = useState(() => (shift ? shift.end !== null : true))
+  const [ended, setEnded] = useState(() =>
+    shift && !shift.allDay ? shift.end !== null : true,
+  )
   const [end, setEnd] = useState(() =>
-    shift?.end ? toLocalInputValue(shift.end) : nowLocalValue(),
+    shift?.end && !shift.allDay ? toLocalInputValue(shift.end) : nowLocalValue(),
   )
+
+  // All-day fields. `date` is used when editing a single entry; from/to for ranges.
+  const initialDate = shift?.allDay ? toDateInputValue(shift.start) : todayDateInputValue()
+  const [date, setDate] = useState(initialDate)
+  const [fromDate, setFromDate] = useState(initialDate)
+  const [toDate, setToDate] = useState(initialDate)
+
+  const [categoryId, setCategoryId] = useState<string | null>(shift?.categoryId ?? null)
   const [note, setNote] = useState(() => shift?.note ?? '')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const validation = useMemo(() => {
+    if (kind === 'allday') {
+      if (isCreate) {
+        const days = enumerateDateRange(fromDate, toDate)
+        if (days.length === 0) {
+          return { ok: false, error: 'End date can’t be before the start date.', info: null }
+        }
+        return { ok: true, error: null, info: `Creates ${days.length} day${days.length === 1 ? '' : 's'}.` }
+      }
+      return date
+        ? { ok: true, error: null, info: null }
+        : { ok: false, error: 'Pick a date.', info: null }
+    }
+
+    // Timed.
     const startMs = new Date(start).getTime()
     if (!start || Number.isNaN(startMs)) {
-      return { ok: false, error: 'Enter a valid start time.', durationMs: 0 }
+      return { ok: false, error: 'Enter a valid start time.', info: null }
     }
     if (!ended) {
       if (hasOtherOngoing) {
-        return {
-          ok: false,
-          error: 'Another shift is already running — stop it first.',
-          durationMs: 0,
-        }
+        return { ok: false, error: 'Another shift is already running — stop it first.', info: null }
       }
-      return { ok: true, error: null, durationMs: 0 }
+      return { ok: true, error: null, info: null }
     }
     const endMs = new Date(end).getTime()
     if (!end || Number.isNaN(endMs)) {
-      return { ok: false, error: 'Enter a valid end time.', durationMs: 0 }
+      return { ok: false, error: 'Enter a valid end time.', info: null }
     }
     if (endMs < startMs) {
-      return {
-        ok: false,
-        error: 'End time can’t be before the start time.',
-        durationMs: 0,
-      }
+      return { ok: false, error: 'End time can’t be before the start time.', info: null }
     }
-    return { ok: true, error: null, durationMs: endMs - startMs }
-  }, [start, end, ended, hasOtherOngoing])
+    return { ok: true, error: null, info: `Duration: ${formatDuration(endMs - startMs)}` }
+  }, [kind, isCreate, fromDate, toDate, date, start, end, ended, hasOtherOngoing])
 
-  function handleSubmit() {
-    if (!validation.ok) return
-    // datetime-local only has minute precision, so a field left untouched would
-    // otherwise drop the original seconds. Keep the original ISO when the
-    // minute-level value is unchanged.
+  function buildInputs(): NewShiftInput[] {
+    const trimmedNote = note.trim()
+    if (kind === 'allday') {
+      const dates = isCreate ? enumerateDateRange(fromDate, toDate) : [date]
+      return dates.map((d) => ({
+        start: dateInputToMidnightIso(d),
+        end: null,
+        note: trimmedNote,
+        allDay: true,
+        categoryId,
+      }))
+    }
+    // Timed — preserve original sub-minute precision when a field is unchanged.
+    const timed = shift && !shift.allDay ? shift : null
     const startIso =
-      shift && toLocalInputValue(shift.start) === start
-        ? shift.start
-        : fromLocalInputValue(start)
+      timed && toLocalInputValue(timed.start) === start ? timed.start : fromLocalInputValue(start)
     let endIso: string | null
     if (!ended) {
       endIso = null
-    } else if (shift?.end && toLocalInputValue(shift.end) === end) {
-      endIso = shift.end
+    } else if (timed?.end && toLocalInputValue(timed.end) === end) {
+      endIso = timed.end
     } else {
       endIso = fromLocalInputValue(end)
     }
-    onSubmit({ start: startIso, end: endIso, note: note.trim() })
+    return [{ start: startIso, end: endIso, note: trimmedNote, allDay: false, categoryId }]
+  }
+
+  function handleSubmit() {
+    if (!validation.ok) return
+    onSubmit(buildInputs())
   }
 
   return (
-    <Modal title={isCreate ? 'Add shift' : 'Edit shift'} onClose={onClose}>
+    <Modal title={isCreate ? 'Add entry' : 'Edit entry'} onClose={onClose}>
       <div className="flex flex-col gap-4">
-        <Field label="Start">
-          <input
-            type="datetime-local"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-            className={inputClass}
-          />
-        </Field>
+        {/* Kind toggle */}
+        <div className="flex rounded-xl bg-slate-900 p-1 ring-1 ring-slate-700">
+          {(['timed', 'allday'] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={[
+                'flex-1 rounded-lg py-2 text-sm font-medium transition',
+                kind === k ? 'bg-slate-700 text-slate-100' : 'text-slate-400',
+              ].join(' ')}
+            >
+              {k === 'timed' ? 'Work shift' : 'All day'}
+            </button>
+          ))}
+        </div>
 
-        <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-2.5">
-            <input
-              type="checkbox"
-              checked={ended}
-              onChange={(e) => setEnded(e.target.checked)}
-              className="h-5 w-5 accent-emerald-500"
-            />
-            <span className="text-sm font-medium text-slate-300">
-              Shift has ended
-            </span>
-          </label>
-
-          {ended ? (
-            <Field label="End">
+        {kind === 'timed' ? (
+          <>
+            <Field label="Start">
               <input
                 type="datetime-local"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
                 className={inputClass}
               />
             </Field>
-          ) : (
-            <p className="rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
-              This shift will be marked as ongoing.
-            </p>
-          )}
-        </div>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={ended}
+                  onChange={(e) => setEnded(e.target.checked)}
+                  className="h-5 w-5 accent-emerald-500"
+                />
+                <span className="text-sm font-medium text-slate-300">Shift has ended</span>
+              </label>
+              {ended ? (
+                <Field label="End">
+                  <input
+                    type="datetime-local"
+                    value={end}
+                    onChange={(e) => setEnd(e.target.value)}
+                    className={inputClass}
+                  />
+                </Field>
+              ) : (
+                <p className="rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
+                  This shift will be marked as ongoing.
+                </p>
+              )}
+            </div>
+          </>
+        ) : isCreate ? (
+          <div className="flex gap-3">
+            <Field label="From">
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => {
+                  setFromDate(e.target.value)
+                  if (toDate < e.target.value) setToDate(e.target.value)
+                }}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="To">
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        ) : (
+          <Field label="Date">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+        )}
+
+        <CategoryPicker
+          categories={categories}
+          value={categoryId}
+          onChange={setCategoryId}
+          onCreate={onCreateCategory}
+        />
 
         <Field label="Note (optional)">
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}
-            placeholder="Anything you want to remember about this shift…"
+            placeholder="Anything you want to remember…"
             className={`${inputClass} resize-none`}
           />
         </Field>
 
-        {validation.ok && ended && (
-          <p className="text-sm text-slate-400">
-            Duration:{' '}
-            <span className="font-semibold text-slate-200">
-              {formatDuration(validation.durationMs)}
-            </span>
-          </p>
-        )}
+        {validation.info && <p className="text-sm text-slate-400">{validation.info}</p>}
         {validation.error && (
           <p className="text-sm font-medium text-rose-400">{validation.error}</p>
         )}
@@ -184,7 +268,7 @@ export function ShiftEditor({
           disabled={!validation.ok}
           className="rounded-xl bg-emerald-600 py-3 text-base font-semibold text-white active:bg-emerald-700 disabled:opacity-40"
         >
-          {isCreate ? 'Add shift' : 'Save changes'}
+          {isCreate ? 'Add' : 'Save changes'}
         </button>
 
         {!isCreate && onDelete && (
@@ -192,7 +276,7 @@ export function ShiftEditor({
             {confirmingDelete ? (
               <div className="flex flex-col gap-2">
                 <p className="text-center text-sm text-slate-300">
-                  Delete this shift permanently?
+                  Delete this entry permanently?
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -217,7 +301,7 @@ export function ShiftEditor({
                 onClick={() => setConfirmingDelete(true)}
                 className="w-full rounded-xl py-2.5 font-medium text-rose-400 active:bg-rose-500/10"
               >
-                Delete shift
+                Delete entry
               </button>
             )}
           </div>

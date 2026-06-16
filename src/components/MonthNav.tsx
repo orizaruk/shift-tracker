@@ -3,20 +3,13 @@ import { formatMonthLabel, type MonthKey } from '../lib/time'
 type MonthNavProps = {
   monthKey: MonthKey
   isCurrentMonth: boolean
-  totalLabel: string
-  shiftCount: number
+  summary: string
   onPrev: () => void
   onNext: () => void
   onToday: () => void
 }
 
-function ArrowButton({
-  dir,
-  onClick,
-}: {
-  dir: 'left' | 'right'
-  onClick: () => void
-}) {
+function ArrowButton({ dir, onClick }: { dir: 'left' | 'right'; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -31,12 +24,11 @@ function ArrowButton({
   )
 }
 
-/** Month switcher with the month's totals. One month visible at a time. */
+/** Month switcher with a one-line summary. One month visible at a time. */
 export function MonthNav({
   monthKey,
   isCurrentMonth,
-  totalLabel,
-  shiftCount,
+  summary,
   onPrev,
   onNext,
   onToday,
@@ -55,9 +47,7 @@ export function MonthNav({
           {formatMonthLabel(monthKey)}
         </span>
         <span className="text-xs text-slate-400">
-          {shiftCount === 0
-            ? 'No shifts'
-            : `${shiftCount} shift${shiftCount === 1 ? '' : 's'} · ${totalLabel}`}
+          {summary}
           {!isCurrentMonth ? ' · tap for today' : ''}
         </span>
       </button>

@@ -14,8 +14,10 @@ import {
 import type { Shift } from './lib/types'
 import { StartStopButton } from './components/StartStopButton'
 import { MonthNav } from './components/MonthNav'
+import { CategorySummary } from './components/CategorySummary'
 import { ShiftList } from './components/ShiftList'
 import { ShiftEditor } from './components/ShiftEditor'
+import { CategoryManager } from './components/CategoryManager'
 import { DataMenu } from './components/DataMenu'
 
 type EditorState =
@@ -25,19 +27,24 @@ type EditorState =
 export default function App() {
   const {
     shifts,
+    categories,
     activeShift,
     saveFailed,
     startShift,
     stopShift,
-    addShift,
+    addShifts,
     updateShift,
     deleteShift,
+    addCategory,
+    updateCategory,
+    deleteCategory,
     replaceAll,
   } = useShifts()
 
   const [viewMonth, setViewMonth] = useState<MonthKey>(() => currentMonthKey())
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [showData, setShowData] = useState(false)
+  const [showCategories, setShowCategories] = useState(false)
 
   // Tick every second while a shift is running, to drive the live timers.
   const now = useNow(activeShift !== null)
@@ -47,10 +54,18 @@ export default function App() {
     [shifts, viewMonth],
   )
 
-  const monthTotalMs = useMemo(
-    () => monthShifts.reduce((sum, s) => sum + durationMs(s, now), 0),
-    [monthShifts, now],
-  )
+  const summary = useMemo(() => {
+    if (monthShifts.length === 0) return 'No entries'
+    const timed = monthShifts.filter((s) => !s.allDay)
+    const allDayCount = monthShifts.length - timed.length
+    const workedMs = timed.reduce((sum, s) => sum + durationMs(s, now), 0)
+    const parts: string[] = []
+    if (timed.length > 0) {
+      parts.push(`${timed.length} shift${timed.length === 1 ? '' : 's'} · ${formatDuration(workedMs)}`)
+    }
+    if (allDayCount > 0) parts.push(`${allDayCount} all-day`)
+    return parts.join(' · ')
+  }, [monthShifts, now])
 
   const isCurrentMonth = viewMonth === currentMonthKey()
   const monthLabel = formatMonthLabel(viewMonth)
@@ -58,21 +73,29 @@ export default function App() {
   // Only one sheet open at a time.
   function openEditor(shift: Shift | null) {
     setShowData(false)
+    setShowCategories(false)
     setEditor({ open: true, shift })
   }
   function openDataMenu() {
     setEditor({ open: false })
+    setShowCategories(false)
     setShowData(true)
   }
+  function openCategories() {
+    setEditor({ open: false })
+    setShowData(false)
+    setShowCategories(true)
+  }
 
-  function handleSubmit(values: NewShiftInput) {
+  function handleSubmit(inputs: NewShiftInput[]) {
+    if (inputs.length === 0) return
     if (editor.open && editor.shift) {
-      updateShift(editor.shift.id, values)
+      updateShift(editor.shift.id, inputs[0])
     } else {
-      addShift(values)
+      addShifts(inputs)
     }
-    // Jump to the month the shift belongs to so the result is visible.
-    setViewMonth(monthKeyOf(new Date(values.start)))
+    // Jump to the month the entry belongs to so the result is visible.
+    setViewMonth(monthKeyOf(new Date(inputs[0].start)))
     setEditor({ open: false })
   }
 
@@ -84,20 +107,31 @@ export default function App() {
   return (
     <div className="mx-auto flex min-h-full max-w-md flex-col gap-5 px-4 pb-8 pt-4">
       <header className="flex items-center justify-between">
-        <h1 className="text-xl font-bold tracking-tight text-slate-100">
-          Shift Tracker
-        </h1>
-        <button
-          type="button"
-          onClick={openDataMenu}
-          aria-label="Export & backup"
-          className="rounded-full p-2 text-slate-400 active:bg-slate-700"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.8 1 6.4 2.7" />
-            <path d="M21 3v5h-5" />
-          </svg>
-        </button>
+        <h1 className="text-xl font-bold tracking-tight text-slate-100">Shift Tracker</h1>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={openCategories}
+            aria-label="Categories"
+            className="rounded-full p-2 text-slate-400 active:bg-slate-700"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L3 13V3h10l7.59 7.59a2 2 0 0 1 0 2.82z" />
+              <circle cx="7.5" cy="7.5" r="1.5" fill="currentColor" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={openDataMenu}
+            aria-label="Export & backup"
+            className="rounded-full p-2 text-slate-400 active:bg-slate-700"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.8 1 6.4 2.7" />
+              <path d="M21 3v5h-5" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {saveFailed && (
@@ -123,28 +157,28 @@ export default function App() {
       <MonthNav
         monthKey={viewMonth}
         isCurrentMonth={isCurrentMonth}
-        totalLabel={formatDuration(monthTotalMs)}
-        shiftCount={monthShifts.length}
+        summary={summary}
         onPrev={() => setViewMonth((m) => addMonths(m, -1))}
         onNext={() => setViewMonth((m) => addMonths(m, 1))}
         onToday={() => setViewMonth(currentMonthKey())}
       />
 
+      <CategorySummary categories={categories} shifts={monthShifts} />
+
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-          Shifts
-        </h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Entries</h2>
         <button
           type="button"
           onClick={() => openEditor(null)}
           className="rounded-full bg-slate-800 px-3 py-1.5 text-sm font-medium text-emerald-400 ring-1 ring-slate-700 active:bg-slate-700"
         >
-          + Add shift
+          + Add
         </button>
       </div>
 
       <ShiftList
         shifts={monthShifts}
+        categories={categories}
         now={now}
         monthLabel={monthLabel}
         onSelect={(shift) => openEditor(shift)}
@@ -153,18 +187,29 @@ export default function App() {
       {editor.open && (
         <ShiftEditor
           shift={editor.shift}
-          hasOtherOngoing={
-            activeShift !== null && activeShift.id !== editor.shift?.id
-          }
+          categories={categories}
+          hasOtherOngoing={activeShift !== null && activeShift.id !== editor.shift?.id}
+          onCreateCategory={addCategory}
           onSubmit={handleSubmit}
           onDelete={editor.shift ? handleDelete : undefined}
           onClose={() => setEditor({ open: false })}
         />
       )}
 
+      {showCategories && (
+        <CategoryManager
+          categories={categories}
+          onAdd={addCategory}
+          onUpdate={updateCategory}
+          onDelete={deleteCategory}
+          onClose={() => setShowCategories(false)}
+        />
+      )}
+
       {showData && (
         <DataMenu
           shifts={shifts}
+          categories={categories}
           onImport={replaceAll}
           onClose={() => setShowData(false)}
         />

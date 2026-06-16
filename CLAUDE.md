@@ -47,26 +47,38 @@ They will not always be available to answer questions — make reasonable decisi
 ## Data model
 
 ```ts
-type Shift = {
-  id: string;        // uuid
-  start: string;     // ISO 8601 datetime
-  end: string | null; // ISO 8601 datetime, or null while ongoing
-  note: string;      // free text, '' if none
+type Shift = {           // an "entry": a timed work shift OR an all-day entry
+  id: string;            // uuid
+  start: string;         // ISO 8601 datetime; for all-day, local midnight of the day
+  end: string | null;    // ISO 8601 datetime; null while ongoing or for all-day
+  note: string;          // free text, '' if none
+  allDay: boolean;       // all-day entry (e.g. sick day) with no specific hours
+  categoryId: string | null; // optional category tag
 };
+
+type Category = { id: string; name: string; color: string /* hex */ };
+
+// Persisted: { version: 2, shifts: Shift[], categories: Category[] }
 ```
 
-- A shift is **ongoing** when `end === null`. Only one ongoing shift at a time.
+- A timed shift is **ongoing** when `!allDay && end === null`. Only one ongoing at a time.
 - Month grouping is by the **start** timestamp's local year-month.
-- Duration = `end - start` (live `now - start` while ongoing).
+- Worked duration = `end - start` (live `now - start` while ongoing); all-day entries have no duration.
+- **Storage v2** (key unchanged: `shift-tracker:data:v1`). `parseData` migrates v1 data in place:
+  missing `allDay`/`categoryId` default to false/null; categories seed to defaults if absent;
+  a `categoryId` not matching any category is nulled. Colors are hex (inline styles, since
+  Tailwind can't JIT runtime color values).
 
 ## Project structure
 
-- `src/lib/types.ts` — types
-- `src/lib/store.ts` — localStorage persistence + load/save/JSON export/import
-- `src/lib/exportText.ts` — readable plain-text report of all shifts (grouped by month)
-- `src/lib/time.ts` — date/time formatting & month helpers
-- `src/hooks/useShifts.ts` — state + actions (start/stop/edit/delete), persistence wiring
-- `src/components/` — UI (StartStopButton, MonthNav, ShiftList, ShiftRow, ShiftEditor, etc.)
+- `src/lib/types.ts` — types (Shift, Category, ShiftData)
+- `src/lib/categories.ts` — color palette + default seeded categories
+- `src/lib/store.ts` — localStorage persistence + load/save/JSON export/import + v1→v2 migration
+- `src/lib/exportText.ts` — readable plain-text report (grouped by month, categories, all-day)
+- `src/lib/time.ts` — date/time formatting, month + date-range helpers
+- `src/hooks/useShifts.ts` — state + actions for entries AND categories, persistence wiring
+- `src/components/` — UI (StartStopButton, MonthNav, CategorySummary, ShiftList, ShiftRow,
+  ShiftEditor, CategoryPicker, CategoryManager, DataMenu, Modal)
 - `src/App.tsx` — composition
 
 ## Status
@@ -86,6 +98,10 @@ headless browser at Galaxy-S24 viewport with zero console errors).
       **https://orizaruk.github.io/shift-tracker/** (HTTPS, manifest/sw/icons all 200).
       Auto-rebuilds and redeploys on every push to `main`. `base: './'` keeps assets working
       under the `/shift-tracker/` subpath.
+- [x] **Readable text export** (`.txt` download + copy-to-clipboard) in the Export & backup sheet.
+- [x] **Categories + all-day entries** (v2): optional color categories (seeded Sick day / Vacation /
+      Holiday, fully manageable), all-day entries with no hours, date-range mass-add (one entry per
+      day), color accents in the list, and a per-month category tally. Verified incl. v1 migration.
 - [ ] Owner's only remaining step: open the URL on the S24 in Chrome → ⋮ → Add to Home screen.
 
 ### Deploy gotcha (for future reference)
