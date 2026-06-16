@@ -77,9 +77,13 @@ headless browser at Galaxy-S24 viewport with zero console errors).
 - [x] Build verified (`npm run build`) + lint clean (`npm run lint`)
 - [x] Persistent-storage request (guards against eviction)
 - [x] README with run + phone-install + deployment instructions
-- [ ] Deployed somewhere with HTTPS so it can be installed on the phone (owner's call —
-      free static host vs. mini-PC self-host; see README "Get it onto your phone")
-- [ ] Not committed yet (waiting on owner's go-ahead per their workflow)
+- [x] Initial commit made on `main`
+- [x] Deploy target chosen: **GitHub Pages**, via `.github/workflows/deploy.yml`
+      (auto build + deploy on every push to `main`). `base: './'` keeps assets working
+      under any repo subpath.
+- [ ] Owner's remaining manual steps (no `gh` CLI available locally): create a GitHub repo,
+      `git remote add origin … && git push -u origin main`, set Pages source to "GitHub
+      Actions", then Add-to-Home-screen on the S24. Full steps in README "Option A".
 
 ### Verified behaviours
 Start→live timer→stop logs a shift; "adjust" edits an ongoing shift's start; manual
