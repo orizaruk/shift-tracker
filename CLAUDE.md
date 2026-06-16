@@ -77,13 +77,19 @@ headless browser at Galaxy-S24 viewport with zero console errors).
 - [x] Build verified (`npm run build`) + lint clean (`npm run lint`)
 - [x] Persistent-storage request (guards against eviction)
 - [x] README with run + phone-install + deployment instructions
-- [x] Initial commit made on `main`
-- [x] Deploy target chosen: **GitHub Pages**, via `.github/workflows/deploy.yml`
-      (auto build + deploy on every push to `main`). `base: './'` keeps assets working
-      under any repo subpath.
-- [ ] Owner's remaining manual steps (no `gh` CLI available locally): create a GitHub repo,
-      `git remote add origin … && git push -u origin main`, set Pages source to "GitHub
-      Actions", then Add-to-Home-screen on the S24. Full steps in README "Option A".
+- [x] Initial commit on `main`; pushed to GitHub: **github.com/orizaruk/shift-tracker** (public)
+- [x] **Deployed live** via GitHub Pages + Actions (`.github/workflows/deploy.yml`):
+      **https://orizaruk.github.io/shift-tracker/** (HTTPS, manifest/sw/icons all 200).
+      Auto-rebuilds and redeploys on every push to `main`. `base: './'` keeps assets working
+      under the `/shift-tracker/` subpath.
+- [ ] Owner's only remaining step: open the URL on the S24 in Chrome → ⋮ → Add to Home screen.
+
+### Deploy gotcha (for future reference)
+The default Actions `GITHUB_TOKEN` could NOT create the Pages site
+(`actions/configure-pages@v5` with `enablement: true` → "Resource not accessible by
+integration"). Fixed by enabling Pages once out-of-band with the owner token:
+`gh api -X POST repos/orizaruk/shift-tracker/pages -f build_type=workflow`, then removing
+the self-enable step. Pages stays enabled; future deploys just work.
 
 ### Verified behaviours
 Start→live timer→stop logs a shift; "adjust" edits an ongoing shift's start; manual
