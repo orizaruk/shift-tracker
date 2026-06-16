@@ -4,13 +4,14 @@ import {
   formatDuration,
   formatMonthLabel,
   formatTime,
+  LOCALE,
   monthKeyOf,
   type MonthKey,
 } from './time'
 
 /** "Mon, 02 Jun 2026" — compact weekday + date for the export. */
 function compactDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
+  return new Date(iso).toLocaleDateString(LOCALE, {
     weekday: 'short',
     day: '2-digit',
     month: 'short',

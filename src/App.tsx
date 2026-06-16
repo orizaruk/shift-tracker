@@ -37,6 +37,7 @@ export default function App() {
     deleteShift,
     addCategory,
     updateCategory,
+    moveCategory,
     deleteCategory,
     replaceAll,
   } = useShifts()
@@ -203,6 +204,7 @@ export default function App() {
           categories={categories}
           onAdd={addCategory}
           onUpdate={updateCategory}
+          onMove={moveCategory}
           onDelete={deleteCategory}
           onClose={() => setShowCategories(false)}
         />

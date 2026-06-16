@@ -3,17 +3,24 @@ import type { NewShiftInput } from '../hooks/useShifts'
 import type { Category, Shift } from '../lib/types'
 import {
   dateInputToMidnightIso,
+  dayDiff,
   enumerateDateRange,
   formatDuration,
   fromLocalInputValue,
+  shiftLocalDateTime,
   toDateInputValue,
   toLocalInputValue,
+  todayAtLocalValue,
   todayDateInputValue,
 } from '../lib/time'
 import { Modal } from './Modal'
 import { CategoryPicker } from './CategoryPicker'
 
 type EntryKind = 'timed' | 'allday'
+
+/** Default start/end for a new timed shift: today at 07:15. */
+const DEFAULT_HOUR = 7
+const DEFAULT_MINUTE = 15
 
 type ShiftEditorProps = {
   /** The entry being edited, or null to create a new one. */
@@ -26,14 +33,6 @@ type ShiftEditorProps = {
   onSubmit: (inputs: NewShiftInput[]) => void
   onDelete?: () => void
   onClose: () => void
-}
-
-function nowLocalValue(): string {
-  return toLocalInputValue(new Date().toISOString())
-}
-
-function minutesAgoLocalValue(minutes: number): string {
-  return toLocalInputValue(new Date(Date.now() - minutes * 60000).toISOString())
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -63,16 +62,28 @@ export function ShiftEditor({
     shift?.allDay ? 'allday' : 'timed',
   )
 
-  // Timed fields.
+  // Timed fields. New shifts default to today at 07:15.
   const [start, setStart] = useState(() =>
-    shift && !shift.allDay ? toLocalInputValue(shift.start) : minutesAgoLocalValue(60),
+    shift && !shift.allDay
+      ? toLocalInputValue(shift.start)
+      : todayAtLocalValue(DEFAULT_HOUR, DEFAULT_MINUTE),
   )
   const [ended, setEnded] = useState(() =>
     shift && !shift.allDay ? shift.end !== null : true,
   )
   const [end, setEnd] = useState(() =>
-    shift?.end && !shift.allDay ? toLocalInputValue(shift.end) : nowLocalValue(),
+    shift?.end && !shift.allDay
+      ? toLocalInputValue(shift.end)
+      : todayAtLocalValue(DEFAULT_HOUR, DEFAULT_MINUTE),
   )
+
+  // When the start's DATE changes, shift the end's date by the same number of
+  // days so the end follows the start (keeps the end's time-of-day).
+  function handleStartChange(next: string) {
+    const delta = dayDiff(start, next)
+    setStart(next)
+    if (delta !== 0) setEnd((prev) => shiftLocalDateTime(prev, delta))
+  }
 
   // All-day fields. `date` is used when editing a single entry; from/to for ranges.
   const initialDate = shift?.allDay ? toDateInputValue(shift.start) : todayDateInputValue()
@@ -177,7 +188,7 @@ export function ShiftEditor({
               <input
                 type="datetime-local"
                 value={start}
-                onChange={(e) => setStart(e.target.value)}
+                onChange={(e) => handleStartChange(e.target.value)}
                 className={inputClass}
               />
             </Field>

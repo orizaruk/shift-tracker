@@ -7,8 +7,48 @@ type CategoryManagerProps = {
   categories: Category[]
   onAdd: (name: string, color: string) => void
   onUpdate: (id: string, patch: Partial<Omit<Category, 'id'>>) => void
+  onMove: (id: string, direction: 'up' | 'down') => void
   onDelete: (id: string) => void
   onClose: () => void
+}
+
+function ReorderButtons({
+  onUp,
+  onDown,
+  upDisabled,
+  downDisabled,
+}: {
+  onUp: () => void
+  onDown: () => void
+  upDisabled: boolean
+  downDisabled: boolean
+}) {
+  return (
+    <div className="flex shrink-0 flex-col">
+      <button
+        type="button"
+        aria-label="Move up"
+        onClick={onUp}
+        disabled={upDisabled}
+        className="rounded p-0.5 text-slate-400 active:bg-slate-700 disabled:opacity-25"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m6 15 6-6 6 6" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        aria-label="Move down"
+        onClick={onDown}
+        disabled={downDisabled}
+        className="rounded p-0.5 text-slate-400 active:bg-slate-700 disabled:opacity-25"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+    </div>
+  )
 }
 
 function Swatches({
@@ -42,6 +82,7 @@ export function CategoryManager({
   categories,
   onAdd,
   onUpdate,
+  onMove,
   onDelete,
   onClose,
 }: CategoryManagerProps) {
@@ -61,14 +102,20 @@ export function CategoryManager({
     <Modal title="Categories" onClose={onClose}>
       <div className="flex flex-col gap-3">
         <p className="text-sm text-slate-400">
-          Tag entries (like sick days) with a color. Deleting a category keeps its
-          entries — it just removes the tag.
+          Tag entries (like sick days) with a color, and use the arrows to reorder
+          them. Deleting a category keeps its entries — it just removes the tag.
         </p>
 
         <div className="flex flex-col gap-2">
-          {categories.map((c) => (
+          {categories.map((c, i) => (
             <div key={c.id} className="rounded-xl bg-slate-900 p-2.5 ring-1 ring-slate-700">
               <div className="flex items-center gap-2">
+                <ReorderButtons
+                  onUp={() => onMove(c.id, 'up')}
+                  onDown={() => onMove(c.id, 'down')}
+                  upDisabled={i === 0}
+                  downDisabled={i === categories.length - 1}
+                />
                 <button
                   type="button"
                   aria-label="Change color"

@@ -26,6 +26,7 @@ export type UseShifts = {
   deleteShift: (id: string) => void
   addCategory: (name: string, color: string) => Category
   updateCategory: (id: string, patch: Partial<Omit<Category, 'id'>>) => void
+  moveCategory: (id: string, direction: 'up' | 'down') => void
   deleteCategory: (id: string) => void
   replaceAll: (shifts: Shift[], categories: Category[]) => void
 }
@@ -135,6 +136,18 @@ export function useShifts(): UseShifts {
     [],
   )
 
+  const moveCategory = useCallback((id: string, direction: 'up' | 'down') => {
+    setCategories((prev) => {
+      const idx = prev.findIndex((c) => c.id === id)
+      if (idx === -1) return prev
+      const target = direction === 'up' ? idx - 1 : idx + 1
+      if (target < 0 || target >= prev.length) return prev
+      const next = [...prev]
+      ;[next[idx], next[target]] = [next[target], next[idx]]
+      return next
+    })
+  }, [])
+
   const deleteCategory = useCallback((id: string) => {
     setCategories((prev) => prev.filter((c) => c.id !== id))
     // Un-categorize affected entries rather than deleting them.
@@ -161,6 +174,7 @@ export function useShifts(): UseShifts {
     deleteShift,
     addCategory,
     updateCategory,
+    moveCategory,
     deleteCategory,
     replaceAll,
   }

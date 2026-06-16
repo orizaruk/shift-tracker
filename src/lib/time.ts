@@ -3,6 +3,12 @@ import type { Shift } from './types'
 /** A month identifier like "2026-06" derived from LOCAL time. */
 export type MonthKey = string
 
+/**
+ * Fixed display locale so dates/times render consistently regardless of the
+ * device locale: European day-first dates (5 June 2026) and a 24-hour clock.
+ */
+export const LOCALE = 'en-GB'
+
 function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n)
 }
@@ -32,20 +38,21 @@ export function addMonths(key: MonthKey, delta: number): MonthKey {
 export function formatMonthLabel(key: MonthKey): string {
   const [year, month] = key.split('-').map(Number)
   const d = new Date(year, month - 1, 1)
-  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+  return d.toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' })
 }
 
-/** "09:30" in local time. */
+/** "09:30" in local time, 24-hour. */
 export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, {
+  return new Date(iso).toLocaleTimeString(LOCALE, {
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
   })
 }
 
 /** "Mon 16" — weekday + day-of-month, local. */
 export function formatDayLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
+  return new Date(iso).toLocaleDateString(LOCALE, {
     weekday: 'short',
     day: '2-digit',
   })
@@ -53,7 +60,7 @@ export function formatDayLabel(iso: string): string {
 
 /** "Monday, 16 June 2026" — full local date. */
 export function formatFullDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
+  return new Date(iso).toLocaleDateString(LOCALE, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -113,6 +120,28 @@ export function toDateInputValue(iso: string): string {
 /** Today's local date as "YYYY-MM-DD". */
 export function todayDateInputValue(): string {
   return toDateInputValue(new Date().toISOString())
+}
+
+/** A datetime-local value for today at a given hour:minute, e.g. todayAtLocalValue(7, 15). */
+export function todayAtLocalValue(hour: number, minute: number): string {
+  const d = new Date()
+  d.setHours(hour, minute, 0, 0)
+  return toLocalInputValue(d.toISOString())
+}
+
+/** Whole-day difference between the date parts of two date(-time) input values. */
+export function dayDiff(fromValue: string, toValue: string): number {
+  const a = Date.parse(`${fromValue.slice(0, 10)}T00:00:00Z`)
+  const b = Date.parse(`${toValue.slice(0, 10)}T00:00:00Z`)
+  return Math.round((b - a) / 86400000)
+}
+
+/** Shift the date part of a "YYYY-MM-DDTHH:mm" value by `days`, keeping the time. */
+export function shiftLocalDateTime(value: string, days: number): string {
+  const [datePart, timePart = '00:00'] = value.split('T')
+  const d = new Date(Date.parse(`${datePart}T00:00:00Z`) + days * 86400000)
+  const shifted = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+  return `${shifted}T${timePart}`
 }
 
 /** ISO string for local midnight of a "YYYY-MM-DD" date value (used for all-day entries). */
