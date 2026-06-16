@@ -59,9 +59,12 @@ export default function App() {
     const timed = monthShifts.filter((s) => !s.allDay)
     const allDayCount = monthShifts.length - timed.length
     const workedMs = timed.reduce((sum, s) => sum + durationMs(s, now), 0)
-    // Worked-hours total is always shown and never includes all-day entries.
-    const parts: string[] = [`${formatDuration(workedMs)} worked`]
-    if (timed.length > 0) parts.push(`${timed.length} shift${timed.length === 1 ? '' : 's'}`)
+    // Worked-hours total never includes all-day entries; shown only when the
+    // month has timed shifts (no "0h" line in all-day-only months).
+    const parts: string[] = []
+    if (timed.length > 0) {
+      parts.push(`${timed.length} shift${timed.length === 1 ? '' : 's'} · ${formatDuration(workedMs)}`)
+    }
     if (allDayCount > 0) parts.push(`${allDayCount} all-day`)
     return parts.join(' · ')
   }, [monthShifts, now])
